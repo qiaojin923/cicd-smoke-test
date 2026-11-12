@@ -1,6 +1,6 @@
 {
   "name": "qiaojin923-npm-cicd-smoke-test",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Smoke test package for npm Trusted Publishing CI/CD. Not for production use.",
   "main": "index.js",
   "files": [
