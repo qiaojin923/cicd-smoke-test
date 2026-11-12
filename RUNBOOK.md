@@ -136,6 +136,35 @@ git tag -f v0.1.1 && git push origin v0.1.1 --force
 
 ---
 
+---
+
+## 失败路径的错误在哪看
+
+**本地 `git commit` / `git push` 不会报错，这是正常的** —— 所有校验都写在 workflow 里，只在 GitHub Actions 的 runner 上执行。所以：
+
+```bash
+# 列出最近的运行
+gh run list --limit 3
+
+# 只看失败步骤的日志
+gh run view <run-id> --log-failed
+
+# 交互式查看
+gh run view <run-id>
+```
+
+或者在网页上：仓库 → **Actions** → 点进那次运行 → 左侧 job `npm publish (trusted publishing)` → 展开红色 ✗ 的步骤。
+
+失败路径测试里应该看到的是：
+
+```
+::error::sha256 mismatch — 制品与 releases/0.1.1.json 记录的不一致，拒绝发布
+```
+
+以及该步骤之后 **Publish to npm 根本没有执行**（步骤列表里它是灰色的）。
+
+如果 Publish 步骤仍然执行了，说明校验被绕过，那是严重问题。
+
 ## 已知坑
 
 | # | 坑 | 处理 |
