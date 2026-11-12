@@ -1,0 +1,116 @@
+name: Publish SDK to npm
+
+# 触发：推送 v* 标签（例：v1.0.0）
+# 仓库里没有任何 SDK 产物，只有 releases/<version>.json（下载地址 + sha256）。
+# 发布时从 CDN 拉取 tgz、校验 sha256、再推给 npm —— 与 AgoraRtm_iOS 用 Package.swift
+# 的 binaryTarget(url:..., checksum:...) 是同一个思路。
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Trusted publishing 硬性要求；缺了会静默退回 token 认证并 ENEEDAUTH
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: npm publish (trusted publishing)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node >= 22.14.0 且 npm >= 11.5.1
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Show toolchain
+        run: |
+          node -v
+          npm -v
+
+      # tag → releases/<version>.json，取下载地址、校验和与 dist-tag
+      - name: Read release manifest
+        id: manifest
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="releases/${VERSION}.json"
+          if [ ! -f "$FILE" ]; then
+            echo "::error::missing manifest $FILE — 发版前必须先提交该版本的 releases/${VERSION}.json"
+            exit 1
+          fi
+          node -e '
+            const m = require("./" + process.argv[1]);
+            const distTag = m.distTag || "latest";
+            for (const k of ["name", "version", "url", "sha256"]) {
+              if (!m[k]) { console.error(`manifest missing field: ${k}`); process.exit(1); }
+            }
+            if (m.version !== process.argv[2]) {
+              console.error(`manifest version ${m.version} != tag ${process.argv[2]}`);
+              process.exit(1);
+            }
+            // dist-tag 合法性：字母开头，可含字母数字 . _ -
+            if (!/^[A-Za-z][A-Za-z0-9._-]*$/.test(distTag)) {
+              console.error(`invalid distTag: ${distTag}`);
+              process.exit(1);
+            }
+            // 预发布版本（含 -）绝不允许打成 latest，否则会顶掉正式版
+            if (distTag === "latest" && m.version.includes("-")) {
+              console.error(`refuse to publish prerelease ${m.version} as latest — 请在清单里显式指定 distTag`);
+              process.exit(1);
+            }
+            console.log(`name=${m.name}`);
+            console.log(`url=${m.url}`);
+            console.log(`sha256=${m.sha256}`);
+            console.log(`version=${m.version}`);
+            console.log(`distTag=${distTag}`);
+          ' "$FILE" "$VERSION" >> "$GITHUB_OUTPUT"
+          echo "--- manifest ---"
+          cat "$GITHUB_OUTPUT" | grep -E '^(name|url|sha256|version|distTag)='
+
+      - name: Download artifact from CDN
+        run: |
+          curl -fsSL --retry 3 --retry-delay 2 \
+            -o "$RUNNER_TEMP/pkg.tgz" \
+            "${{ steps.manifest.outputs.url }}"
+          ls -l "$RUNNER_TEMP/pkg.tgz"
+
+      # 完整性校验：这就是 AgoraRtm_iOS 里 checksum 的等价物
+      - name: Verify sha256
+        run: |
+          EXPECTED="${{ steps.manifest.outputs.sha256 }}"
+          ACTUAL=$(sha256sum "$RUNNER_TEMP/pkg.tgz" | cut -d' ' -f1)
+          echo "expected: $EXPECTED"
+          echo "actual  : $ACTUAL"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::sha256 mismatch — 制品与 releases/${{ steps.manifest.outputs.version }}.json 记录的不一致，拒绝发布"
+            exit 1
+          fi
+
+      # 防止 tarball 内容与本次 tag 错位
+      - name: Verify tarball identity
+        run: |
+          tar -xzOf "$RUNNER_TEMP/pkg.tgz" package/package.json > "$RUNNER_TEMP/manifest.json"
+          node -e '
+            const fs = require("fs");
+            const got = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            if (got.name !== process.argv[2]) { console.error(`name mismatch: ${got.name}`); process.exit(1); }
+            if (got.version !== process.argv[3]) { console.error(`version mismatch: ${got.version}`); process.exit(1); }
+            console.log(`OK ${got.name}@${got.version}`);
+          ' "$RUNNER_TEMP/manifest.json" \
+            "${{ steps.manifest.outputs.name }}" \
+            "${{ steps.manifest.outputs.version }}"
+
+      # 不要设置 NODE_AUTH_TOKEN：OIDC 自动换短期 token
+      # --tag 决定版本落到哪个通道（latest / hotfix / special / beta ...）
+      - name: Publish to npm
+        run: npm publish "$RUNNER_TEMP/pkg.tgz" --access public --tag "${{ steps.manifest.outputs.distTag }}"

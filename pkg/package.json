@@ -1,0 +1,19 @@
+{
+  "name": "qiaojin923-npm-cicd-smoke-test",
+  "version": "0.1.0",
+  "description": "Smoke test package for npm Trusted Publishing CI/CD. Not for production use.",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qiaojin923/cicd-smoke-test.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

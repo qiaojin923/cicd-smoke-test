@@ -1,0 +1,7 @@
+{
+  "name": "qiaojin923-npm-cicd-smoke-test",
+  "version": "0.1.0",
+  "distTag": "latest",
+  "url": "https://raw.githubusercontent.com/qiaojin923/cicd-smoke-test/main/artifacts/qiaojin923-npm-cicd-smoke-test-0.1.0.tgz",
+  "sha256": "3b076fbf2a0eefca925e767bf223508e008ebca313f1ddb16bd76c1b9e4a8a91"
+}
