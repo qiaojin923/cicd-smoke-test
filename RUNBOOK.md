@@ -28,7 +28,17 @@ npm CLI 的 `otplease` 只在收到 `EOTP`(401) 时才提示输验证码，403 �
 
 ## 步骤
 
-### 1. 登录并发布首版（人工，会提示输入 OTP）
+### 0. 本会话先锁定官方源（重要）
+
+```bash
+cd /Users/admin/Documents/deepseek-harness/default-workspace/cicd-smoke-test
+export npm_config_registry=https://registry.npmjs.org/
+npm config get registry      # 应输出 https://registry.npmjs.org/
+```
+
+本机默认 registry 是 npmmirror，`npm trust` 会打到镜像上并报 `E404 .../trust not found`。用环境变量一次性解决，后续所有命令都不用再加 `--registry`。
+
+### 1. 发布首版（已完成，0.1.0 已上线）
 
 准备好手机上的 6 位验证码，在**你自己的终端**里执行：
 
@@ -136,6 +146,7 @@ git tag -f v0.1.1 && git push origin v0.1.1 --force
 | 4 | 发布要求 2FA OTP，脚本/CI 无法代劳 | 首版人工执行，之后走 OIDC |
 | 5 | `pack.sh` 默认版本取自 `pkg/package.json` | 显式传 `VERSION=` |
 | 6 | 整包 unpublish 后同名 24 小时内不能重发 | 用递增版本号 |
+| 7 | 本机默认 registry 是 npmmirror，`--registry` 断行会失效，命令打到镜像并报 404 | 先 `export npm_config_registry=https://registry.npmjs.org/`，或写成 `--registry=https://...`（带等号） |
 
 ---
 
